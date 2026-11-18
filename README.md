@@ -8,6 +8,7 @@
 - Saves with **Ctrl+S** and exits with **Ctrl+Q**.
 - Warns before quitting with unsaved changes.
 - Arrow keys, Home/End, Page Up/Down, Backspace, and Delete.
+- Interactive search with **Ctrl+F**, then **Ctrl+N** / **Ctrl+P** to jump between matches.
 - Line numbers, filename/status bar, and a modified indicator.
 - Initial syntax coloring for Shay keywords, strings, and numbers.
 - Uses the terminal's own ANSI palette instead of fixed RGB colors.
@@ -30,9 +31,24 @@ Because these are ANSI styles, the actual hues come from the user's terminal pal
 
 ## Build
 
-Requires a C++17 compiler and CMake 3.16 or newer.
+Requires a C++17 compiler. You can build with GNU Make or CMake.
 
-### Linux
+### GNU Make (Linux, macOS, or MSYS2)
+
+    make
+    ./build/ysedit hello.shay
+
+Useful targets:
+
+    make debug
+    make release
+    make run FILE=hello.shay
+    make clean
+    make install
+
+Override the compiler with `make CXX=clang++`, or customize `CXXFLAGS`.
+
+### CMake (cross-platform)
 
     cmake -S . -B build
     cmake --build build
@@ -61,7 +77,7 @@ Install CMake and a MinGW-w64 C++ compiler in your MSYS2 environment, then:
 | Page Up / Page Down | Move by a screen |
 | Enter | Insert a line break |
 | Backspace / Delete | Delete text |
-| Ctrl+S | Save |
+| Ctrl+F | Search |\n| Ctrl+N / Ctrl+P | Next / previous search match |\n| Ctrl+S | Save |
 | Ctrl+Q | Quit (press again to confirm if modified) |
 
 ## Project status
