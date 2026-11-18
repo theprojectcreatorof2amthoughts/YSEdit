@@ -135,6 +135,7 @@ public:
             }
         }
 #endif
+        if (c == 9) return {Key::Character, '\t'};
         if (c == 17) return {Key::Quit};
         if (c == 19) return {Key::Save};
         if (c == 6) return {Key::Find};
@@ -212,6 +213,27 @@ private:
 
     int visibleRows() const { return std::max(1, terminal_.size().first - 2); }
 
+    static int visualColumn(const std::string& line, int byteColumn) {
+        int visual = 0;
+        const int limit = std::min(byteColumn, static_cast<int>(line.size()));
+        for (int i = 0; i < limit; ++i) {
+            if (line[i] == '\t') visual += 8 - (visual % 8);
+            else ++visual;
+        }
+        return visual;
+    }
+
+    static int byteColumnAtVisual(const std::string& line, int targetVisual) {
+        int visual = 0;
+        for (int i = 0; i < static_cast<int>(line.size()); ++i) {
+            if (visual >= targetVisual) return i;
+            const int next = visual + (line[i] == '\t' ? 8 - (visual % 8) : 1);
+            if (targetVisual < next) return i;
+            visual = next;
+        }
+        return static_cast<int>(line.size());
+    }
+
     void process(Key key) {
         if (key.code != Key::Quit) quitArmed_ = false;
         switch (key.code) {
@@ -259,8 +281,20 @@ private:
                 if (col_ < static_cast<int>(lines_[row_].size())) ++col_;
                 else if (row_ + 1 < static_cast<int>(lines_.size())) { ++row_; col_ = 0; }
                 break;
-            case Key::Up: if (row_ > 0) { --row_; col_ = std::min(col_, static_cast<int>(lines_[row_].size())); } break;
-            case Key::Down: if (row_ + 1 < static_cast<int>(lines_.size())) { ++row_; col_ = std::min(col_, static_cast<int>(lines_[row_].size())); } break;
+            case Key::Up:
+                if (row_ > 0) {
+                    const int target = visualColumn(lines_[row_], col_);
+                    --row_;
+                    col_ = byteColumnAtVisual(lines_[row_], target);
+                }
+                break;
+            case Key::Down:
+                if (row_ + 1 < static_cast<int>(lines_.size())) {
+                    const int target = visualColumn(lines_[row_], col_);
+                    ++row_;
+                    col_ = byteColumnAtVisual(lines_[row_], target);
+                }
+                break;
             case Key::Home: col_ = 0; break;
             case Key::End: col_ = static_cast<int>(lines_[row_].size()); break;
             case Key::PageUp: row_ = std::max(0, row_ - visibleRows()); col_ = std::min(col_, static_cast<int>(lines_[row_].size())); break;
@@ -323,45 +357,66 @@ private:
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$' || c == '!';
     }
 
-    void drawSyntax(const std::string& line, int start, int width) {
+    void drawSyntax(const std::string& line, int startColumn, int width) {
         const bool shay = filename_.size() >= 5 &&
             (filename_.substr(filename_.size() - 5) == ".shay" || filename_.substr(filename_.size() - 5) == "shaii");
-        int i = start, shown = 0;
-        while (i < static_cast<int>(line.size()) && shown < width) {
-            char c = line[i];
-            if (shay && c == '!' && i + 1 < static_cast<int>(line.size()) && line[i + 1] == '#') {
+        int visual = 0;
+        const int endColumn = startColumn + width;
+
+        // Tabs remain single bytes in the file, but occupy cells up to the
+        // next 8-column tab stop on screen. Clip by visual columns so
+        // horizontal scrolling and cursor placement use the same coordinates.
+        auto emit = [&](char c) {
+            const int cells = c == '\t' ? 8 - (visual % 8) : 1;
+            for (int cell = 0; cell < cells; ++cell) {
+                if (visual >= startColumn && visual < endColumn)
+                    std::cout << (c == '\t' ? ' ' : c);
+                ++visual;
+            }
+        };
+
+        for (int i = 0; i < static_cast<int>(line.size());) {
+            if (shay && line[i] == '!' && i + 1 < static_cast<int>(line.size()) && line[i + 1] == '#') {
                 terminal_.magenta();
-                std::cout << "!#";
-                i += 2; shown += 2;
-                terminal_.reset(); continue;
+                emit(line[i++]);
+                emit(line[i++]);
+                terminal_.reset();
+                continue;
             }
-            if (c == '"' || c == '\'') {
-                char quote = c; terminal_.green();
-                do { std::cout << line[i++]; ++shown; } while (i < static_cast<int>(line.size()) && shown < width && line[i - 1] != quote);
-                terminal_.reset(); continue;
+            if (line[i] == '"' || line[i] == '\'') {
+                const char quote = line[i];
+                terminal_.green();
+                do {
+                    const char c = line[i++];
+                    emit(c);
+                    if (c == quote) break;
+                } while (i < static_cast<int>(line.size()));
+                terminal_.reset();
+                continue;
             }
-            if (c >= '0' && c <= '9') {
+            if (line[i] >= '0' && line[i] <= '9') {
                 terminal_.yellow();
-                while (i < static_cast<int>(line.size()) && shown < width && line[i] >= '0' && line[i] <= '9') { std::cout << line[i++]; ++shown; }
-                terminal_.reset(); continue;
+                while (i < static_cast<int>(line.size()) && line[i] >= '0' && line[i] <= '9')
+                    emit(line[i++]);
+                terminal_.reset();
+                continue;
             }
-            if (wordChar(c)) {
+            if (wordChar(line[i])) {
                 int end = i;
                 while (end < static_cast<int>(line.size()) && wordChar(line[end])) ++end;
-                std::string word = line.substr(i, end - i);
-                bool keyword = shay && (word == "ifit" || word == "elseit" || word == "exec" ||
+                const std::string word = line.substr(i, end - i);
+                const bool keyword = shay && (word == "ifit" || word == "elseit" || word == "exec" ||
                     word == "finish" || word == "forw" || word == "instxt" || word == "instxtexit" ||
                     word == "insval" || word == "$declr" || word == "$shaiiport");
                 if (keyword) terminal_.cyan();
-                for (; i < end && shown < width; ++i, ++shown) std::cout << line[i];
+                while (i < end) emit(line[i++]);
                 if (keyword) terminal_.reset();
                 continue;
             }
-            std::cout << c; ++i; ++shown;
+            emit(line[i++]);
         }
         terminal_.reset();
     }
-
     void render() {
         auto [height, width] = terminal_.size();
         int bodyRows = std::max(1, height - 2);
@@ -369,8 +424,10 @@ private:
         if (row_ < rowOffset_) rowOffset_ = row_;
         if (row_ >= rowOffset_ + bodyRows) rowOffset_ = row_ - bodyRows + 1;
         int textWidth = std::max(1, width - gutter);
-        if (col_ < colOffset_) colOffset_ = col_;
-        if (col_ >= colOffset_ + textWidth) colOffset_ = col_ - textWidth + 1;
+        const int cursorVisualColumn = visualColumn(lines_[row_], col_);
+        if (cursorVisualColumn < colOffset_) colOffset_ = cursorVisualColumn;
+        if (cursorVisualColumn >= colOffset_ + textWidth)
+            colOffset_ = cursorVisualColumn - textWidth + 1;
 
         terminal_.hideCursor();
         terminal_.move(1, 1); terminal_.reverse();
@@ -404,7 +461,7 @@ private:
         std::string position = " " + std::to_string(row_ + 1) + ":" + std::to_string(col_ + 1) + (dirty_ ? "  Modified" : "  Saved");
         if (static_cast<int>(position.size()) > width) position.resize(width);
         std::cout << position << "\x1b[K";
-        terminal_.move(row_ - rowOffset_ + 2, gutter + col_ - colOffset_ + 1);
+        terminal_.move(row_ - rowOffset_ + 2, gutter + cursorVisualColumn - colOffset_ + 1);
         terminal_.showCursor();
     }
 };
