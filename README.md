@@ -22,7 +22,7 @@ YSEdit deliberately does not choose a theme or paint a solid background:
 | Shay keywords | ANSI cyan |
 | Strings | ANSI green |
 | Numbers | ANSI yellow |
-| Comments | Dim |
+| Shay !# marker | ANSI magenta |
 | Line numbers | Dim |
 | Status/title bars | Reverse video |
 
