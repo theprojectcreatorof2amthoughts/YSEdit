@@ -17,7 +17,7 @@
 
 namespace {
 struct Key {
-    enum Code { Character, Enter, Backspace, Delete, Left, Right, Up, Down, Home, End, PageUp, PageDown, Quit, Save, Unknown } code = Unknown;
+    enum Code { Character, Enter, Backspace, Delete, Left, Right, Up, Down, Home, End, PageUp, PageDown, Quit, Save, Find, NextMatch, PreviousMatch, Unknown } code = Unknown;
     char ch = 0;
 };
 
@@ -116,6 +116,9 @@ public:
 #endif
         if (c == 17) return {Key::Quit};
         if (c == 19) return {Key::Save};
+        if (c == 6) return {Key::Find};
+        if (c == 14) return {Key::NextMatch};
+        if (c == 16) return {Key::PreviousMatch};
         if (c == 13 || c == 10) return {Key::Enter};
         if (c == 8 || c == 127) return {Key::Backspace};
         if (c >= 32 && c <= 126) return {Key::Character, static_cast<char>(c)};
@@ -193,6 +196,13 @@ private:
                 else { quitArmed_ = true; message_ = "Unsaved changes! Ctrl-Q again to discard, or Ctrl-S to save."; }
                 break;
             case Key::Save: save(); break;
+            case Key::Find: {
+                std::string query = prompt("Find: ");
+                if (!query.empty()) findMatch(query, true);
+                break;
+            }
+            case Key::NextMatch: findMatch(lastSearch_, true); break;
+            case Key::PreviousMatch: findMatch(lastSearch_, false); break;
             case Key::Character:
                 lines_[row_].insert(lines_[row_].begin() + col_, key.ch); ++col_; dirty_ = true; break;
             case Key::Enter: {
@@ -232,6 +242,56 @@ private:
             case Key::PageDown: row_ = std::min(static_cast<int>(lines_.size()) - 1, row_ + visibleRows()); col_ = std::min(col_, static_cast<int>(lines_[row_].size())); break;
             default: break;
         }
+    }
+
+    std::string lastSearch_;
+
+    std::string prompt(const std::string& label) {
+        std::string value;
+        message_ = label;
+        while (true) {
+            render();
+            Key key = terminal_.readKey();
+            if (key.code == Key::Enter) break;
+            if (key.code == Key::Backspace) {
+                if (!value.empty()) value.pop_back();
+            } else if (key.code == Key::Character) {
+                value.push_back(key.ch);
+            } else if (key.code == Key::Quit) {
+                message_ = "Search cancelled";
+                return {};
+            }
+            message_ = label + value;
+        }
+        return value;
+    }
+
+    void findMatch(const std::string& query, bool forward) {
+        if (query.empty()) {
+            message_ = "No previous search";
+            return;
+        }
+        lastSearch_ = query;
+        const int count = static_cast<int>(lines_.size());
+        for (int step = 0; step < count; ++step) {
+            int targetRow = forward ? (row_ + step) % count : (row_ - step + count) % count;
+            const std::string& line = lines_[targetRow];
+            std::size_t found = std::string::npos;
+            if (forward) {
+                std::size_t start = step == 0 ? static_cast<std::size_t>(std::min(col_ + 1, static_cast<int>(line.size()))) : 0;
+                found = line.find(query, start);
+            } else {
+                std::size_t start = step == 0 ? static_cast<std::size_t>(std::max(0, col_ - 1)) : line.size();
+                found = line.rfind(query, start);
+            }
+            if (found != std::string::npos) {
+                row_ = targetRow;
+                col_ = static_cast<int>(found);
+                message_ = "Found: " + query;
+                return;
+            }
+        }
+        message_ = "Not found: " + query;
     }
 
     static bool wordChar(char c) {
