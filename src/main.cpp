@@ -26,10 +26,13 @@ public:
     Terminal() {
 #ifdef _WIN32
         output_ = GetStdHandle(STD_OUTPUT_HANDLE);
-        DWORD mode = 0;
-        if (GetConsoleMode(output_, &mode))
-            SetConsoleMode(output_, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
+        if (GetConsoleMode(output_, &originalOutputMode_)) {
+            haveOutputMode_ = true;
+            SetConsoleMode(output_, originalOutputMode_ | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
+            screenActive_ = true;
+        }
 #else
+        screenActive_ = isatty(STDOUT_FILENO) != 0;
         if (isatty(STDIN_FILENO)) {
             tcgetattr(STDIN_FILENO, &original_);
             termios raw = original_;
@@ -46,14 +49,26 @@ public:
         const char* noColor = std::getenv("NO_COLOR");
         const char* term = std::getenv("TERM");
         color_ = noColor == nullptr && !(term && std::string(term) == "dumb");
-        std::cout << "\x1b[?1049h\x1b[?25l\x1b[2J";
+        if (screenActive_) {
+            std::cout << "\x1b[?1049h\x1b[?25l\x1b[2J" << std::flush;
+        }
     }
 
     ~Terminal() {
-        std::cout << "\x1b[0m\x1b[?25h\x1b[?1049l" << std::flush;
+        restoreScreen();
 #ifndef _WIN32
         if (active_) tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
+#else
+        if (haveOutputMode_) SetConsoleMode(output_, originalOutputMode_);
 #endif
+    }
+
+    // Return to the shell's original screen, just like nano does.
+    // Safe to call more than once; the destructor is the fallback.
+    void restoreScreen() {
+        if (!screenActive_) return;
+        std::cout << "\x1b[0m\x1b[?25h\x1b[?1049l" << std::flush;
+        screenActive_ = false;
     }
 
     void move(int row, int col) { std::cout << "\x1b[" << row << ';' << col << 'H'; }
@@ -127,8 +142,11 @@ public:
 
 private:
     bool color_ = true;
+    bool screenActive_ = false;
 #ifdef _WIN32
     HANDLE output_ = INVALID_HANDLE_VALUE;
+    DWORD originalOutputMode_ = 0;
+    bool haveOutputMode_ = false;
 #else
     termios original_{};
     bool active_ = false;
@@ -147,6 +165,7 @@ public:
             render();
             process(terminal_.readKey());
         }
+        terminal_.restoreScreen();
     }
 
 private:
