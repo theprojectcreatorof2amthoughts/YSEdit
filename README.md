@@ -10,6 +10,7 @@
 - Arrow keys, Home/End, Page Up/Down, Backspace, and Delete.
 - Interactive search with **Ctrl+F**, then **Ctrl+N** / **Ctrl+P** to jump between matches.
 - Line numbers, filename/status bar, and a modified indicator.
+- Restores the shell's previous terminal screen and cursor when you quit, like nano.
 - Initial syntax coloring for Shay keywords, strings, and numbers.
 - Uses the terminal's own ANSI palette instead of fixed RGB colors.
 
