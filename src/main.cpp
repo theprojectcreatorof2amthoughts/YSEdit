@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdlib>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -9,6 +10,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <conio.h>
+#include <io.h>
 #else
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -26,10 +28,15 @@ public:
     Terminal() {
 #ifdef _WIN32
         output_ = GetStdHandle(STD_OUTPUT_HANDLE);
+        // Native Windows consoles expose a console handle. MSYS2 terminals
+        // such as mintty/CLANG64 often expose a tty without one, so detect
+        // both. The alternate-screen escape sequences work in either tty.
+        screenActive_ = _isatty(_fileno(stdout)) != 0;
         if (GetConsoleMode(output_, &originalOutputMode_)) {
             haveOutputMode_ = true;
-            SetConsoleMode(output_, originalOutputMode_ | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
-            screenActive_ = true;
+            if (SetConsoleMode(output_, originalOutputMode_ |
+                    ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT))
+                screenActive_ = true;
         }
 #else
         screenActive_ = isatty(STDOUT_FILENO) != 0;
