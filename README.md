@@ -8,6 +8,7 @@
 - Saves with **Ctrl+S** and exits with **Ctrl+Q**.
 - Warns before quitting with unsaved changes.
 - Arrow keys, Home/End, Page Up/Down, Backspace, and Delete.
+- Tab characters are preserved and displayed at 8-column tab stops; horizontal scrolling and cursor placement account for their visual width.
 - Interactive search with **Ctrl+F**, then **Ctrl+N** / **Ctrl+P** to jump between matches.
 - Line numbers, filename/status bar, and a modified indicator.
 - Restores the shell's previous terminal screen and cursor on exit, like nano.
@@ -77,6 +78,7 @@ Install CMake and a MinGW-w64 C++ compiler in your MSYS2 environment, then:
 | Home / End | Start / end of line |
 | Page Up / Page Down | Move by a screen |
 | Enter | Insert a line break |
+| Tab | Insert a tab character |
 | Backspace / Delete | Delete text |
 | Ctrl+F | Search |\n| Ctrl+N / Ctrl+P | Next / previous search match |\n| Ctrl+S | Save |
 | Ctrl+Q | Quit (press again to confirm if modified) |
