@@ -62,6 +62,7 @@ public:
     void cyan() { if (color_) std::cout << "\x1b[36m"; }
     void green() { if (color_) std::cout << "\x1b[32m"; }
     void yellow() { if (color_) std::cout << "\x1b[33m"; }
+    void magenta() { if (color_) std::cout << "\x1b[35m"; }
     void reverse() { if (color_) std::cout << "\x1b[7m"; }
     void hideCursor() { std::cout << "\x1b[?25l"; }
     void showCursor() { std::cout << "\x1b[?25h" << std::flush; }
@@ -243,10 +244,11 @@ private:
         int i = start, shown = 0;
         while (i < static_cast<int>(line.size()) && shown < width) {
             char c = line[i];
-            if (shay && c == '#') {
-                terminal_.dim();
-                while (i < static_cast<int>(line.size()) && shown < width) { std::cout << line[i++]; ++shown; }
-                terminal_.reset(); break;
+            if (shay && c == '!' && i + 1 < static_cast<int>(line.size()) && line[i + 1] == '#') {
+                terminal_.magenta();
+                std::cout << "!#";
+                i += 2; shown += 2;
+                terminal_.reset(); continue;
             }
             if (c == '"' || c == '\'') {
                 char quote = c; terminal_.green();
