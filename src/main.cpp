@@ -203,23 +203,29 @@ private:
 
     void loadSyntaxKeywords() {
 #ifdef _WIN32
-        const char* command = "curl -fsSL --max-time 3 \"https://raw.githubusercontent.com/theprojectcreatorof2amthoughts/Shay/main/syntax/keywords.txt\" -o \".ysedit-syntax.tmp\" >NUL 2>&1";
+        const char* command = "curl -fsSL --max-time 3 \"https://raw.githubusercontent.com/theprojectcreatorof2amthoughts/Shay/main/syntax/keywords.txt\" 2>NUL";
+        FILE* pipe = _popen(command, "r");
 #else
-        const char* command = "curl -fsSL --max-time 3 \"https://raw.githubusercontent.com/theprojectcreatorof2amthoughts/Shay/main/syntax/keywords.txt\" -o \".ysedit-syntax.tmp\" >/dev/null 2>&1";
+        const char* command = "curl -fsSL --max-time 3 \"https://raw.githubusercontent.com/theprojectcreatorof2amthoughts/Shay/main/syntax/keywords.txt\" 2>/dev/null";
+        FILE* pipe = popen(command, "r");
 #endif
-        if (std::system(command) == 0) {
-            std::ifstream syntax(".ysedit-syntax.tmp");
-            std::unordered_set<std::string> fetched;
-            std::string token;
-            while (std::getline(syntax, token)) {
-                const auto first = token.find_first_not_of(" \t\r");
-                if (first == std::string::npos || token[first] == '#') continue;
-                const auto last = token.find_last_not_of(" \t\r");
-                fetched.insert(token.substr(first, last - first + 1));
-            }
-            if (!fetched.empty()) keywords_ = std::move(fetched);
+        if (!pipe) return;
+
+        std::unordered_set<std::string> fetched;
+        char buffer[256];
+        while (std::fgets(buffer, sizeof(buffer), pipe)) {
+            std::string token(buffer);
+            const auto first = token.find_first_not_of(" \\t\\r\\n");
+            if (first == std::string::npos || token[first] == '#') continue;
+            const auto last = token.find_last_not_of(" \\t\\r\\n");
+            fetched.insert(token.substr(first, last - first + 1));
         }
-        std::remove(".ysedit-syntax.tmp");
+#ifdef _WIN32
+        const int status = _pclose(pipe);
+#else
+        const int status = pclose(pipe);
+#endif
+        if (status == 0 && !fetched.empty()) keywords_ = std::move(fetched);
     }
 
     bool save() {
