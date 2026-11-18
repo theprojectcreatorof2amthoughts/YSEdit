@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #ifdef _WIN32
@@ -136,7 +137,7 @@ public:
         }
 #endif
         if (c == 9) return {Key::Character, '\t'};
-        if (c == 17) return {Key::Quit};
+        if (c == 24 || c == 17) return {Key::Quit};
         if (c == 19) return {Key::Save};
         if (c == 6) return {Key::Find};
         if (c == 14) return {Key::NextMatch};
@@ -166,6 +167,7 @@ public:
         if (filename_.empty()) filename_ = "[No Name]";
         else load();
         if (lines_.empty()) lines_.emplace_back();
+        loadSyntaxKeywords();
     }
     void run() {
         while (!quit_) {
@@ -180,8 +182,13 @@ private:
     std::string filename_;
     std::vector<std::string> lines_;
     int row_ = 0, col_ = 0, rowOffset_ = 0, colOffset_ = 0;
-    bool dirty_ = false, quit_ = false, quitArmed_ = false;
-    std::string message_ = "Ctrl-S save | Ctrl-Q quit | Arrows move";
+    bool dirty_ = false, quit_ = false;
+    std::unordered_set<std::string> keywords_ = {
+        "$declr", "$shaiiport", "$shazport", "brew", "ifit", "elseit", "exec",
+        "finish", "forw", "instxt", "instxtexit", "insval", "inpvarforw",
+        "andit", "orit", "notit", "true", "false"
+    };
+    std::string message_ = "Ctrl-S save | Ctrl-X exit | Arrows move";
 
     void load() {
         std::ifstream in(filename_, std::ios::binary);
@@ -192,6 +199,27 @@ private:
             lines_.push_back(line);
         }
         message_ = "Opened " + filename_;
+    }
+
+    void loadSyntaxKeywords() {
+#ifdef _WIN32
+        const char* command = "curl -fsSL --max-time 3 \"https://raw.githubusercontent.com/theprojectcreatorof2amthoughts/Shay/main/syntax/keywords.txt\" -o \".ysedit-syntax.tmp\" >NUL 2>&1";
+#else
+        const char* command = "curl -fsSL --max-time 3 \"https://raw.githubusercontent.com/theprojectcreatorof2amthoughts/Shay/main/syntax/keywords.txt\" -o \".ysedit-syntax.tmp\" >/dev/null 2>&1";
+#endif
+        if (std::system(command) == 0) {
+            std::ifstream syntax(".ysedit-syntax.tmp");
+            std::unordered_set<std::string> fetched;
+            std::string token;
+            while (std::getline(syntax, token)) {
+                const auto first = token.find_first_not_of(" \t\r");
+                if (first == std::string::npos || token[first] == '#') continue;
+                const auto last = token.find_last_not_of(" \t\r");
+                fetched.insert(token.substr(first, last - first + 1));
+            }
+            if (!fetched.empty()) keywords_ = std::move(fetched);
+        }
+        std::remove(".ysedit-syntax.tmp");
     }
 
     bool save() {
@@ -209,6 +237,23 @@ private:
         dirty_ = false;
         message_ = "Saved " + filename_;
         return true;
+    }
+
+    void requestQuit() {
+        if (!dirty_) {
+            quit_ = true;
+            return;
+        }
+        message_ = "Unsaved changes: Y=save and quit | N=discard and quit | any other key=cancel";
+        render();
+        const Key answer = terminal_.readKey();
+        if (answer.code == Key::Character && (answer.ch == 'y' || answer.ch == 'Y')) {
+            if (save()) quit_ = true;
+        } else if (answer.code == Key::Character && (answer.ch == 'n' || answer.ch == 'N')) {
+            quit_ = true;
+        } else {
+            message_ = "Quit cancelled";
+        }
     }
 
     int visibleRows() const { return std::max(1, terminal_.size().first - 2); }
@@ -235,12 +280,9 @@ private:
     }
 
     void process(Key key) {
-        if (key.code != Key::Quit) quitArmed_ = false;
         switch (key.code) {
             case Key::Quit:
-                if (!dirty_) quit_ = true;
-                else if (quitArmed_) quit_ = true;
-                else { quitArmed_ = true; message_ = "Unsaved changes! Ctrl-Q again to discard, or Ctrl-S to save."; }
+                requestQuit();
                 break;
             case Key::Save: save(); break;
             case Key::Find: {
@@ -405,9 +447,7 @@ private:
                 int end = i;
                 while (end < static_cast<int>(line.size()) && wordChar(line[end])) ++end;
                 const std::string word = line.substr(i, end - i);
-                const bool keyword = shay && (word == "ifit" || word == "elseit" || word == "exec" ||
-                    word == "finish" || word == "forw" || word == "instxt" || word == "instxtexit" ||
-                    word == "insval" || word == "$declr" || word == "$shaiiport");
+                const bool keyword = shay && keywords_.count(word) != 0;
                 if (keyword) terminal_.cyan();
                 while (i < end) emit(line[i++]);
                 if (keyword) terminal_.reset();
