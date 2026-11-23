@@ -489,7 +489,7 @@ private:
             if (fileRow < static_cast<int>(lines_.size())) {
                 terminal_.dim();
                 std::string number = std::to_string(fileRow + 1);
-                std::cout << std::string(std::max(0, gutter - 2 - static_cast<int>(number.size())), ' ') << number << ' ';
+                std::cout << std::string(std::max(0, gutter - 1 - static_cast<int>(number.size())), ' ') << number << ' ';
                 terminal_.reset();
                 drawSyntax(lines_[fileRow], colOffset_, textWidth);
             } else { terminal_.dim(); std::cout << '~'; terminal_.reset(); }
